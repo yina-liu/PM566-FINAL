@@ -1,0 +1,1 @@
+The entire dataset reflects incidents of crime in the City of Los Angeles dating back to 2020 (https://data.lacity.org/A-Safe-City/Crime-Data-from-2020-to-Present/2nrs-mtv8). The arrest data in the City of Los Angeles dating to 2020 can be downloaded at https://data.lacity.org/A-Safe-City/Arrest-Data-from-2020-to-Present/amvf-fr72.
