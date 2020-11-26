@@ -1,0 +1,287 @@
+---
+title: "Analysis of burglaries and victims in LA"
+author: "YINA LIU"
+output: 
+    html_document:
+        toc: TRUE
+        toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r, include = FALSE}
+library(data.table)
+library(dtplyr)
+library(dplyr)
+library(lubridate)
+library(leaflet)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(lubridate)
+library(qwraps2)
+library(plotly)
+```
+
+## Introduction
+The entire dataset reflects incidents of crime in the City of Los Angeles dating back to 2020 (https://data.lacity.org/A-Safe-City/Crime-Data-from-2020-to-Present/2nrs-mtv8 ). After reviewing all the data, I found that so far, one of the most frequency crimes in L.A. is burglary. Besides, I also introduced arrest data in the City of Los Angeles dating to 2020 (https://data.lacity.org/A-Safe-City/Arrest-Data-from-2020-to-Present/amvf-fr72) as an assisted dataset, to explore the relationship of crime and arrest.  
+<br>
+
+The primary interest of the project is:  
+- Is there an association between burglary and victims’ gender, age or race?  
+- At what times in 2020 and where in Los Angeles were burglaries happened highest and loweset?  
+- What the pattern between crime number and arrest number of areas in Los Angeles?  
+<br>
+
+
+```{r, include = FALSE}
+# read in the datasets
+crime <- data.table::fread("/Users/apple1/Desktop/USC\ Biostatistics/PM566/HW/PM566\ Midterm\ Project/data/Crime_Data_from_2020_to_Present.csv")
+bul <- crime[which(crime$'Crm Cd Desc' == 'BURGLARY')]
+crm <- crime[,c(3,5,6)]
+  
+arrest <- data.table::fread("/Users/apple1/Desktop/USC\ Biostatistics/PM566/HW/PM566\ Midterm\ Project/data/Arrest_Data_from_2020_to_Present.csv")
+arr <- arrest[,c(3,5,6)]
+
+```
+
+
+```{r, include = FALSE}
+# check the dimensions, headers and footers
+dim(bul)
+head(bul)
+tail(bul)
+
+# check the variable names and variable types
+str(bul)
+
+#Assign and combine desenct name to desenct code
+bul$`Vict Descent`[bul$`Vict Descent`=='A'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='B'] <- 'Black'
+bul$`Vict Descent`[bul$`Vict Descent`=='C'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='D'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='F'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='G'] <- 'Guamanian'
+bul$`Vict Descent`[bul$`Vict Descent`=='H'] <- 'Hispanic/Latin'
+bul$`Vict Descent`[bul$`Vict Descent`=='I'] <- 'AIAN'
+bul$`Vict Descent`[bul$`Vict Descent`=='J'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='K'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='L'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='O'] <- 'Other'
+bul$`Vict Descent`[bul$`Vict Descent`=='P'] <- 'Pacific Islander'
+bul$`Vict Descent`[bul$`Vict Descent`=='S'] <- 'Samoan'
+bul$`Vict Descent`[bul$`Vict Descent`=='U'] <- 'Hawaiian'
+bul$`Vict Descent`[bul$`Vict Descent`=='V'] <- 'Asian'
+bul$`Vict Descent`[bul$`Vict Descent`=='W'] <- 'White'
+bul$`Vict Descent`[bul$`Vict Descent`=='Z'] <- 'Asian'
+
+# transform character to date and extract month from occurance date
+bul$`DATE OCC` <- as.Date(substr(bul$`DATE OCC`,1,10),"%m/%d/%Y")
+bul$month_occurance <- month(bul$`DATE OCC`)
+
+# take a closer look at the key variables. 
+
+# check the `Vict Age`, `Vict Sex` and `Vict Descent` variables.
+summary(bul$`Vict Age`)
+table(bul$`Vict Sex`)
+table(bul$`Vict Descent`)
+
+# check how many Geographic Areas in LA has been evaluated 
+length(unique(bul$AREA))
+length(unique(bul$`AREA NAME`))
+
+# check the range of lattitude and longitude.
+summary(bul$LAT)
+summary(bul$LON)
+
+```
+
+```{r, include = FALSE}
+# check for missing values
+age_mv <- sum(bul$`Vict Sex`=='') + sum(bul$`Vict Sex`=='X')
+age_mv/length(bul$`Vict Sex`)
+
+des_mv <- sum(bul$`Vict Descent`=='') + sum(bul$`Vict Descent`=='X')
+des_mv/length(bul$`Vict Descent`)
+
+# check for impausible values and its proportion
+sum(bul$`Vict Age`== 0)
+sum(bul$`Vict Age`== 0)/length(bul$`Vict Age`)
+
+sum(bul$LAT== 0)
+sum(bul$LAT== 0)/length(bul$LAT)
+sum(bul$LON== 0)/length(bul$LON)
+
+# remove the missing and impausible values
+bul <- bul[which(bul$`Vict Sex`!='')]
+bul <- bul[which(bul$`Vict Sex`!='X')]
+bul <- bul[which(bul$`Vict Descent`!='')]
+bul <- bul[which(bul$`Vict Descent`!='X')]
+
+bul <- bul[which(bul$`Vict Age`!=0)]
+summary(bul$`Vict Age`)
+
+bul <- bul[which(bul$LAT!=0)]
+bul <- bul[which(bul$LON!=0)]
+summary(bul$LAT)
+summary(bul$LON)
+```
+<br>
+
+## Results
+
+### Barchart for races
+```{r,  echo = FALSE, out.width = "588", out.height = "378",warning=FALSE}
+p<-ggplot(bul,aes(x =`Vict Descent`)) + geom_bar(stat = 'count', fill = 'lightpink', colour = 'darkred') + labs(title = "Numbers by descent")
+ggplotly(p)
+```
+White experienced the most burglaries, followed by Hispanic/Latin, others, blacks and asians.  
+
+### Boxplot for age by race
+```{r, echo = FALSE, out.width = "588", out.height = "378",warning=FALSE}
+p<-ggplot(bul,aes(x=factor(`Vict Descent`),y=`Vict Age`))+geom_boxplot() 
+ggplotly(p)
+```
+Regarding the relationship between victims' age and descents, hispanic/latin are relatively younger compared with other descents.  
+
+### Barchart for sex by race
+```{r, echo = FALSE, out.width = "588", out.height = "378",warning=FALSE}
+p<-ggplot(bul,mapping = aes(x = `Vict Descent`, fill = `Vict Sex`))+
+  geom_bar()+
+  labs(title = "Vict Descent Category by Sex")+
+  scale_fill_brewer(palette = "Set3")
+ggplotly(p)
+```
+It is also worth noting that, unlike other descents, black women are more likely to be burgled than black men (53% and 47% respectively).  
+
+### Barchart for areas
+```{r, echo = FALSE, out.width = "588", out.height = "378",warning=FALSE}
+p<-ggplot(bul,aes(x =`AREA NAME`)) + geom_bar(stat = 'count', fill = 'lightyellow', colour = 'orange') + labs(title = "Numbers by Area") + theme(axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5))
+ggplotly(p)
+
+```
+For patterns of burglaries by areas, we found that Wilshire, West LA and Pacific are the top three places with the most burglaries (671, 544 and 446 respectively), which together accounted for over a quarter of the total number of burglaries in Los Angeles.  
+
+### Leaflet for gender
+```{r, echo = FALSE,warning=FALSE}
+colorplot <- if_else(bul$`Vict Sex`=="F","red","blue")
+leaflet(bul) %>%
+  addProviderTiles('OpenStreetMap') %>%
+  addCircles(lat=~LAT, lng=~LON, radius = 0.01, color = colorplot, fillColor = colorplot ) 
+```
+
+### Line plot for change of occurace number by month -- total
+```{r, echo = FALSE,warning=FALSE}
+
+bul1 <- bul[which(bul$month_occurance!=10)]
+
+p<-ggplot(bul1,aes(x =month_occurance)) + geom_line(stat = 'count') +geom_point(stat = 'count')+scale_x_continuous(breaks=seq(0, 9, 1)) 
+ggplotly(p)
+```
+In the first half of the year, there were on average of 700 burglaries per month. This number reached the peak at 840 in May as the number of burglaries in Wilshire increased by three times compared with usual during that month. In the rest three months, the number of burlgaries in L.A. sharply decreased and dropped to 550 by August and September.  
+
+### Line plot for occurace number of areas by month
+```{r,echo = FALSE,warning=FALSE}
+p <- ggplot(bul1,aes(x =month_occurance, color = `AREA NAME`)) + geom_line(stat = 'count') +geom_point(stat = 'count')+scale_x_continuous(breaks=seq(0, 9, 1)) 
+
+ggplotly(p)
+```
+
+### Line plot for occurace number of genders by month
+```{r,echo = FALSE,warning=FALSE}
+p<-ggplot(bul1,aes(x =month_occurance, color = `Vict Sex`)) + geom_line(stat = 'count') +geom_point(stat = 'count')+scale_x_continuous(breaks=seq(0, 9, 1)) 
+ggplotly(p)
+```
+
+### Line plot for for occurace number of races by month
+```{r,echo = FALSE,warning=FALSE}
+p<-ggplot(bul1,aes(x =month_occurance,  color = `Vict Descent`)) + geom_line(stat = 'count') +geom_point(stat = 'count')+scale_x_continuous(breaks=seq(0, 9, 1)) 
+ggplotly(p)
+```
+In addition, there is no significant relationship between sex or descent of victims and month.  
+
+### Pattern of crime and arrest by area
+```{r, results = "asis", echo = FALSE, warning=FALSE}
+crm$`DATE OCC` <- as.Date(substr(crm$`DATE OCC`,1,10),"%m/%d/%Y")
+arr$`DATE OCC` <- as.Date(substr(arr$`DATE OCC`,1,10),"%m/%d/%Y")
+c <- as.data.frame(table(crm$`AREA NAME`))
+a <- as.data.frame(table(arr$`Area Name`))
+crime_arrest <- cbind(c, a[,2], a[,2]/c[,2])
+colnames(crime_arrest) <- c('area', 'crime', 'arrest', 'arrest_rate')
+
+crime_arrest %>% 
+           plot_ly(x = ~crime, y = ~arrest, 
+                   type = 'scatter',
+                   mode = 'markers',
+                   color = ~area,
+                   size = ~arrest_rate,
+                   sizes = c(5, 45),
+                   marker = list(sizemode='diameter', opacity=0.5))
+```
+To explore the pattern of crime number and arrest number, scatter plot is a good tool. The x-axis is crime number, the y-axis is arrest number. Every bubble represents an area in Los Angeles and the size of bubble means the arrest rate of every area. Central area and Van Nuys have the highest arrest rate in 2020, at about 44%. But Wilshire has the lowest arrest rate, at about 20%.  
+
+### Summary table for age, sex and races
+```{r, results = "asis", echo = FALSE, warning=FALSE}
+
+options(qwraps2_markup = "markdown")
+
+summary1 <-
+  list("Victim Age" =
+       list("min"       = ~ min(`Vict Age`),
+            "max"       = ~ max(`Vict Age`),
+            "mean (sd)" = ~ qwraps2::mean_sd(`Vict Age`)),
+       
+       "Victim Gender" =
+       list("Male" = ~ qwraps2::n_perc0(`Vict Sex` == 'M'),
+            "Female"  = ~ qwraps2::n_perc0(`Vict Sex` == 'F'))
+       )
+whole <- summary_table(bul, summary1, by = c("Vict Descent"))
+whole
+```
+
+### Summary table for area and occurance month
+```{r, results = "asis", echo = FALSE, warning=FALSE}
+bul$area_all <- paste0(bul$AREA,': ',bul$`AREA NAME`)
+
+area_t <- xtabs(~area_all + month_occurance,data=bul)
+area <- as.data.frame(cbind(area_t, total = margin.table(area_t,1)))
+setDT(area, keep.rownames = TRUE)
+
+library(DT)
+areatb <- area %>%  select(rn,`1`,`2`,`3`,`4`,`5`,`6`,`7`,`8`,`9`,`10`, total)
+datatable(areatb)
+
+
+#kable(area, "html") %>%
+#  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+
+### Summary table for crime and arrest
+```{r, results = "asis", echo = FALSE, warning=FALSE}
+crime_arrest$arrest_rate <- round(crime_arrest$arrest_rate,2)
+catb <- crime_arrest %>%  select(area, crime, arrest, arrest_rate)
+datatable(catb)
+```
+
+<br>
+
+
+## Conclusion
+- Most burglaries victims were white people with a mean age of 49 years old.  
+- Generally, males are more likely to be burgled than female except for black descent. 
+- A majority of burglaries occurred in May during this year，and the number of burglaries reached the lowest in August and September.  
+- Wilshire, West LA and the Pacific are the three most dangerous areas of burglary in the city of Los Angeles.  
+- Central area and Van Nuys have the highest arrest rate in 2020, at about 44%. But Wilshire has the lowest arrest rate, at about 20%.  
+
+<br>
+
+## Report  
+The link to the report  is https://github.com/yina-liu/PM566-FINAL/blob/master/report/report.pdf.
+
+
